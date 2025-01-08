@@ -1,4 +1,4 @@
-import { Controller, Post } from '@nestjs/common';
+import { Controller, Get, Post } from '@nestjs/common';
 import { DatabaseService } from 'src/database/database.service';
 
 @Controller('health')
@@ -14,5 +14,11 @@ export class HealthController {
     } catch (error) {
       return { message: 'Failed to force failover', error: error.message };
     }
+  }
+
+  @Get('instance')
+  async getCurrentInstance(): Promise<{ instance: string }> {
+    const instance = await this.databaseService.getCurrentInstance();
+    return { instance };
   }
 }

@@ -1,18 +1,18 @@
-version: '3.8'
 services:
   mongodb-primary:
-    image: mongo:latest
-    command: mongod --replSet rs0 --bind_ip_all
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_primary_data:/data/db
-
-  mongodb-secondary:
-    image: mongo:latest
-    command: mongod --replSet rs0 --bind_ip_all
+    image: mongo
+    container_name: mongodb-primary
     ports:
       - "27018:27017"
+    command: --replSet rs0
+    volumes:
+      - mongodb_primary_data:/data/db
+  mongodb-secondary:
+    image: mongo
+    container_name: mongodb-secondary
+    ports:
+      - "27019:27017"
+    command: --replSet rs0
     volumes:
       - mongodb_secondary_data:/data/db
 
