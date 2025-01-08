@@ -65,4 +65,39 @@ export class DatabaseService {
       this.logger.error('Failed to switch to secondary database');
     }
   }
+
+  async getCurrentDbInstance(): Promise<string> {
+    return this.isFailoverMode ? 'SECONDARY' : 'PRIMARY';
+  }
+
+  // Method to force failover 
+  async forcePrimaryFailure() {
+    this.logger.log('Forcing primary database failure...');
+    
+    // Store the real primary URI
+    const realPrimaryUri = this.primaryUri;
+    
+    // Invalidate primary URI
+    this.primaryUri = 'mongodb+srv://invalid-connection';
+    
+    // Immediately switch to secondary without waiting for health check
+    this.logger.log('Forcing immediate switch to secondary...');
+    await this.switchToSecondary();
+    
+    // Log current state
+    this.logger.log(`Current URI: ${this.currentUri}`);
+    this.logger.log(`Failover Mode: ${this.isFailoverMode}`);
+    
+    // Restore real URI after 1 minute
+    setTimeout(async () => {
+      this.primaryUri = realPrimaryUri;
+      this.logger.log('Restored primary database connection string');
+    }, 60000);
+
+    return {
+      status: 'failover_initiated',
+      currentDatabase: await this.getCurrentDbInstance(),
+      isFailoverMode: this.isFailoverMode
+    };
+  }
 }

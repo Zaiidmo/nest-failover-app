@@ -1,26 +1,26 @@
 import { Injectable } from '@nestjs/common';
-import { CreateDemoDto } from './dto/create-demo.dto';
-import { UpdateDemoDto } from './dto/update-demo.dto';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { Message } from './demo.schema';
+import { DatabaseService } from '../database/database.service';
 
 @Injectable()
 export class DemoService {
-  create(createDemoDto: CreateDemoDto) {
-    return 'This action adds a new demo';
+  constructor(
+    @InjectModel(Message.name) private messageModel: Model<Message>,
+    private databaseService: DatabaseService,
+  ) {}
+
+  async createMessage(text: string): Promise<Message> {
+    const dbInstance = await this.databaseService.getCurrentDbInstance();
+    return this.messageModel.create({
+      text,
+      dbInstance,
+      timestamp: new Date(),
+    });
   }
 
-  findAll() {
-    return `This action returns all demo`;
-  }
-
-  findOne(id: number) {
-    return `This action returns a #${id} demo`;
-  }
-
-  update(id: number, updateDemoDto: UpdateDemoDto) {
-    return `This action updates a #${id} demo`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} demo`;
+  async getMessages(): Promise<Message[]> {
+    return this.messageModel.find().sort({ timestamp: -1 }).limit(10);
   }
 }
