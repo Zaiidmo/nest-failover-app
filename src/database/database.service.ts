@@ -1,103 +1,121 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { Message } from 'src/demo/demo.schema';
 import { Interval } from '@nestjs/schedule';
-import * as mongoose from 'mongoose';
 
 @Injectable()
-export class DatabaseService {
+export class DatabaseService implements OnApplicationBootstrap {
   private readonly logger = new Logger(DatabaseService.name);
-  private primaryUri = process.env.PRIMARY_DATABASE_URI;
-  private secondaryUri = process.env.SECONDARY_DATABASE_URI;
-  private currentUri: string;
   private isFailoverMode = false;
+  private lastSyncTime = new Date();
 
-  constructor() {
-    this.currentUri = this.primaryUri;
+  constructor(
+    @InjectModel(Message.name, 'primary') private primaryMessageModel: Model<Message>,
+    @InjectModel(Message.name, 'secondary') private secondaryMessageModel: Model<Message>,
+  ) {}
+
+  async onApplicationBootstrap() {
+    await this.initialSync();
+    this.startPeriodicSync();
   }
 
-  async getActiveConnectionString(): Promise<string> {
-    return this.currentUri;
-  }
-
-  @Interval(30000)
-  async checkDatabaseHealth() {
+  private async initialSync() {
     try {
-      const conn = await mongoose.createConnection(this.currentUri).asPromise();
-      await conn.close();
+      const primaryMessages = await this.primaryMessageModel.find().exec();
       
-      if (this.isFailoverMode && this.currentUri === this.secondaryUri) {
-        await this.switchToPrimary();
+      for (const msg of primaryMessages) {
+        await this.secondaryMessageModel.findOneAndUpdate(
+          { _id: msg._id },
+          { ...msg.toObject(), dbInstance: 'SECONDARY' },
+          { upsert: true, new: true }
+        );
       }
+      this.logger.log('Initial sync completed');
     } catch (error) {
-      this.logger.error(`Database health check failed: ${error.message}`);
-      await this.handleFailover();
+      this.logger.error(`Initial sync failed: ${error.message}`);
     }
   }
 
-  private async handleFailover() {
+  @Interval(5000) // Sync every 5 seconds
+  private async startPeriodicSync() {
     if (!this.isFailoverMode) {
-      this.logger.log('Initiating database failover...');
-      await this.switchToSecondary();
+      try {
+        const newMessages = await this.primaryMessageModel
+          .find({ timestamp: { $gt: this.lastSyncTime } })
+          .exec();
+
+        for (const msg of newMessages) {
+          await this.secondaryMessageModel.findOneAndUpdate(
+            { _id: msg._id },
+            { ...msg.toObject(), dbInstance: 'SECONDARY' },
+            { upsert: true, new: true }
+          );
+        }
+
+        if (newMessages.length > 0) {
+          this.logger.log(`Synced ${newMessages.length} new messages`);
+          this.lastSyncTime = new Date();
+        }
+      } catch (error) {
+        this.logger.error(`Sync failed: ${error.message}`);
+      }
+    }
+  }
+
+  async createMessage(text: string): Promise<Message> {
+    const model = this.isFailoverMode ? this.secondaryMessageModel : this.primaryMessageModel;
+    const instance = this.isFailoverMode ? 'SECONDARY' : 'PRIMARY';
+    
+    return await model.create({
+      text,
+      dbInstance: instance
+    });
+  }
+
+  async getAllMessages(): Promise<Message[]> {
+    const model = this.isFailoverMode ? this.secondaryMessageModel : this.primaryMessageModel;
+    return await model.find().sort({ timestamp: -1 }).exec();
+  }
+
+  @Interval(3000) // Check health every 3 seconds
+  async checkHealth() {
+    try {
+      if (this.isFailoverMode) {
+        // Try to switch back to primary
+        await this.primaryMessageModel.findOne();
+        await this.switchToPrimary();
+      } else {
+        await this.primaryMessageModel.findOne();
+      }
+    } catch (error) {
+      if (!this.isFailoverMode) {
+        await this.switchToSecondary();
+      }
     }
   }
 
   private async switchToPrimary() {
-    try {
-      const conn = await mongoose.createConnection(this.primaryUri).asPromise();
-      await conn.close();
-
-      this.currentUri = this.primaryUri;
-      this.isFailoverMode = false;
-      this.logger.log('Switched back to primary database');
-    } catch (error) {
-      this.logger.error('Failed to switch back to primary database');
-    }
+    this.isFailoverMode = false;
+    this.logger.log('Switched to PRIMARY database');
   }
 
   private async switchToSecondary() {
-    try {
-      const conn = await mongoose.createConnection(this.secondaryUri).asPromise();
-      await conn.close();
-      
-      this.currentUri = this.secondaryUri;
-      this.isFailoverMode = true;
-      this.logger.log('Switched to secondary database');
-    } catch (error) {
-      this.logger.error('Failed to switch to secondary database');
-    }
+    this.isFailoverMode = true;
+    this.logger.log('Switched to SECONDARY database');
   }
 
-  async getCurrentDbInstance(): Promise<string> {
+  async getCurrentInstance(): Promise<string> {
     return this.isFailoverMode ? 'SECONDARY' : 'PRIMARY';
   }
 
-  // Method to force failover 
+  // For testing purposes
   async forcePrimaryFailure() {
-    this.logger.log('Forcing primary database failure...');
-    
-    // Store the real primary URI
-    const realPrimaryUri = this.primaryUri;
-    
-    // Invalidate primary URI
-    this.primaryUri = 'mongodb+srv://invalid-connection';
-    
-    // Immediately switch to secondary without waiting for health check
-    this.logger.log('Forcing immediate switch to secondary...');
     await this.switchToSecondary();
-    
-    // Log current state
-    this.logger.log(`Current URI: ${this.currentUri}`);
-    this.logger.log(`Failover Mode: ${this.isFailoverMode}`);
-    
-    // Restore real URI after 1 minute
-    setTimeout(async () => {
-      this.primaryUri = realPrimaryUri;
-      this.logger.log('Restored primary database connection string');
-    }, 60000);
-
     return {
       status: 'failover_initiated',
-      currentDatabase: await this.getCurrentDbInstance(),
-      isFailoverMode: this.isFailoverMode
+      currentInstance: await this.getCurrentInstance()
     };
   }
 }
+

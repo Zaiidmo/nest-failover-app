@@ -1,17 +1,30 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
-import { DemoService } from './demo.service';
+// messages.controller.ts
+import { Controller, Get, Post, Body, Delete } from '@nestjs/common';
+import { DatabaseService } from 'src/database/database.service';
+import { Message } from './demo.schema';
 
-@Controller('demo')
+@Controller('messages')
 export class DemoController {
-  constructor(private demoService: DemoService) {}
+  constructor(private readonly dbService: DatabaseService) {}
 
-  @Post('message')
-  async createMessage(@Body('text') text: string) {
-    return this.demoService.createMessage(text);
+  @Post()
+  async createMessage(@Body('text') text: string): Promise<Message> {
+    return await this.dbService.createMessage(text);
   }
 
-  @Get('messages')
-  async getMessages() {
-    return this.demoService.getMessages();
+  @Get()
+  async getAllMessages(): Promise<Message[]> {
+    return await this.dbService.getAllMessages();
+  }
+
+  @Get('instance')
+  async getCurrentInstance(): Promise<{ instance: string }> {
+    const instance = await this.dbService.getCurrentInstance();
+    return { instance };
+  }
+
+  @Post('force-failover')
+  async forceFailover() {
+    return await this.dbService.forcePrimaryFailure();
   }
 }

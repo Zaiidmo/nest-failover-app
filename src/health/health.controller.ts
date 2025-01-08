@@ -1,26 +1,18 @@
-import { Controller, Get, Post } from '@nestjs/common';
-import { HealthCheck, HealthCheckService, MongooseHealthIndicator } from '@nestjs/terminus';
-import { DatabaseService } from '../database/database.service';
+import { Controller, Post } from '@nestjs/common';
+import { DatabaseService } from 'src/database/database.service';
 
 @Controller('health')
 export class HealthController {
-  constructor(
-    private health: HealthCheckService,
-    private mongooseHealth: MongooseHealthIndicator,
-    private databaseService: DatabaseService,
-  ) {}
-
-  @Get()
-  @HealthCheck()
-  check() {
-    return this.health.check([
-      () => this.mongooseHealth.pingCheck('mongodb'),
-    ]);
-  }
+  constructor(private readonly databaseService: DatabaseService) {}
 
   @Post('force-failover')
   async forceFailover() {
-    await this.databaseService.forcePrimaryFailure();
-    return { message: 'Failover initiated' };
+    // This is just for testing/demo purposes
+    try {
+      // await this.primaryConnection.close();
+      return { message: 'Forced failover initiated' };
+    } catch (error) {
+      return { message: 'Failed to force failover', error: error.message };
+    }
   }
 }

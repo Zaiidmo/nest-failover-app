@@ -1,31 +1,31 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ScheduleModule } from '@nestjs/schedule';
-import { DatabaseModule } from './database/database.module';
 import { DatabaseService } from './database/database.service';
-import { HealthModule } from './health/health.module';
+import { DemoController } from './demo/demo.controller';
+import { Message, MessageSchema } from './demo/demo.schema';
 import { ConfigModule } from '@nestjs/config';
-import { DemoModule } from './demo/demo.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
     }),
-    DatabaseModule,
     ScheduleModule.forRoot(),
-    MongooseModule.forRootAsync({
-      imports: [DatabaseModule],
-      useFactory: async (databaseService: DatabaseService) => ({
-        uri: await databaseService.getActiveConnectionString(),
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-      }),
-      inject: [DatabaseService],
+    MongooseModule.forRoot(process.env.PRIMARY_DATABASE_URI, {
+      connectionName: 'primary',
     }),
-    HealthModule,
-    DemoModule,
+    MongooseModule.forRoot(process.env.SECONDARY_DATABASE_URI, {
+      connectionName: 'secondary',
+    }),
+    MongooseModule.forFeature([
+      { name: Message.name, schema: MessageSchema }
+    ], 'primary'),
+    MongooseModule.forFeature([
+      { name: Message.name, schema: MessageSchema }
+    ], 'secondary'),
   ],
+  controllers: [DemoController],
+  providers: [DatabaseService],
 })
 export class AppModule {}

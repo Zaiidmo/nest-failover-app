@@ -12,7 +12,7 @@ export class DemoService {
   ) {}
 
   async createMessage(text: string): Promise<Message> {
-    const dbInstance = await this.databaseService.getCurrentDbInstance();
+    const dbInstance = await this.databaseService.getCurrentInstance();
     return this.messageModel.create({
       text,
       dbInstance,
