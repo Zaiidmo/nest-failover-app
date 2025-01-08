@@ -6,6 +6,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TerminusModule } from '@nestjs/terminus';
 import { DatabaseService } from './Database/database.service';
 import { HealthController } from './Health/health.controller';
+import { DatabaseHealthIndicator } from './Health/HealthIndicator.service';
 
 @Module({
   imports: [
@@ -27,6 +28,6 @@ import { HealthController } from './Health/health.controller';
     }),
   ],
   controllers: [AppController, HealthController],
-  providers: [AppService, DatabaseService, ],
+  providers: [AppService, DatabaseService,DatabaseHealthIndicator],
 })
 export class AppModule {}
