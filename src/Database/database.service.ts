@@ -49,4 +49,8 @@ export class DatabaseService {
   getConnection() {
     return this.activeConnection;
   }
+
+  returnConnection() {
+    return this.activeConnection;
+  }
 }

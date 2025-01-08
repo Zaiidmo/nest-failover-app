@@ -15,19 +15,27 @@ import { DatabaseHealthIndicator } from './Health/HealthIndicator.service';
       isGlobal: true,
     }),
     MongooseModule.forRootAsync({
-      useFactory: async () => ({
-        uri: process.env.PRIMARY_DATABASE, // Primary Database URI
-        connectionName: 'primary', //Connection Alias
-      }),
-    }),
-    MongooseModule.forRootAsync({
-      useFactory: async () => ({
-        uri: process.env.SECONDARY_DATABASE, // Secondary Database URI
-        connectionName: 'secondary',// Connection Alias
-      }),
+      useFactory: async () => {
+        // Try to get the primary URI, fall back to secondary if not available
+        const primaryDbUri = process.env.PRIMARY_DATABASE;
+        const secondaryDbUri = process.env.SECONDARY_DATABASE;
+        const uri = primaryDbUri || secondaryDbUri;
+
+        if (!uri) {
+          throw new Error('No database connection string available');
+        }
+
+        return {
+          uri,
+          useNewUrlParser: true,
+          useUnifiedTopology: true,
+          retryWrites: true, // Enable write retries on failover
+          w: 'majority', // Ensure write operations are acknowledged
+        };
+      },
     }),
   ],
   controllers: [AppController, HealthController],
-  providers: [AppService, DatabaseService,DatabaseHealthIndicator],
+  providers: [AppService, DatabaseService, DatabaseHealthIndicator],
 })
 export class AppModule {}
