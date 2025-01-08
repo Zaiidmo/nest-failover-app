@@ -4,7 +4,7 @@ import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule } from '@nestjs/config';
 import { TerminusModule } from '@nestjs/terminus';
-import { DatabaseService } from './database.service';
+import { DatabaseService } from './Database/database.service';
 
 @Module({
   imports: [
